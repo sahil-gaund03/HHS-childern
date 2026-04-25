@@ -23,11 +23,24 @@ df.columns = [
     "hhs_discharge"
 ]
 
-# -------------------------------
-# KPIs
-# -------------------------------
-df['transfer_efficiency'] = df['cbp_transfer'] / df['cbp_custody']
-df['discharge_effectiveness'] = df['hhs_discharge'] / df['hhs_care']
+# Fix data types
+cols = [
+    'cbp_intake',
+    'cbp_custody',
+    'cbp_transfer',
+    'hhs_care',
+    'hhs_discharge'
+]
+
+for col in cols:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Fill missing
+df.fillna(0, inplace=True)
+
+# Safe calculations
+df['transfer_efficiency'] = df['cbp_transfer'] / df['cbp_custody'].replace(0, 1)
+df['discharge_effectiveness'] = df['hhs_discharge'] / df['hhs_care'].replace(0, 1)
 df['backlog'] = df['cbp_intake'] - df['hhs_discharge']
 
 # -------------------------------
