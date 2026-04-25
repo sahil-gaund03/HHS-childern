@@ -1,25 +1,27 @@
 # =========================================================
-# CARE TRANSITION ANALYTICS DASHBOARD
-# Clean • Professional • Intern-Level
+# CARE TRANSITION DASHBOARD (FINAL CLEAN VERSION)
 # =========================================================
 
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
-st.set_page_config(page_title="Care Analytics", layout="wide")
+st.set_page_config(page_title="Care Dashboard", layout="wide")
+
+st.title("📊 Care Transition Efficiency Dashboard")
 
 # ---------------------------------------------------------
-# LOAD DATA (SAFE)
+# LOAD DATA
 # ---------------------------------------------------------
 @st.cache_data
 def load_data():
     df = pd.read_csv("HHS_Unaccompanied_Alien_Children_Program.csv")
 
-    # Convert date
+    # Convert Date
     df['Date'] = pd.to_datetime(df['Date'])
 
-    # Rename columns (clean naming)
+    # Rename columns
     df.columns = [
         "date",
         "cbp_intake",
@@ -30,7 +32,7 @@ def load_data():
     ]
 
     # Fix numeric columns
-    num_cols = [
+    cols = [
         'cbp_intake',
         'cbp_custody',
         'cbp_transfer',
@@ -38,11 +40,11 @@ def load_data():
         'hhs_discharge'
     ]
 
-    for col in num_cols:
+    for col in cols:
         df[col] = df[col].astype(str).str.replace(',', '')
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    df[num_cols] = df[num_cols].fillna(0)
+    df[cols] = df[cols].fillna(0)
 
     return df
 
@@ -50,18 +52,18 @@ def load_data():
 df = load_data()
 
 # ---------------------------------------------------------
-# FEATURE ENGINEERING (KPIs)
+# KPI CALCULATIONS
 # ---------------------------------------------------------
 df['transfer_efficiency'] = df['cbp_transfer'] / df['cbp_custody'].replace(0, 1)
 df['discharge_effectiveness'] = df['hhs_discharge'] / df['hhs_care'].replace(0, 1)
 df['throughput'] = df['hhs_discharge'] / df['cbp_intake'].replace(0, 1)
 df['backlog'] = df['cbp_intake'] - df['hhs_discharge']
 
-# Rolling average (slightly advanced but easy)
+# Rolling average
 df['backlog_ma7'] = df['backlog'].rolling(7).mean()
 
 # ---------------------------------------------------------
-# SIDEBAR FILTERS
+# SIDEBAR FILTER
 # ---------------------------------------------------------
 st.sidebar.header("Filters")
 
@@ -73,18 +75,15 @@ metric_choice = st.sidebar.selectbox(
     ["Transfer Efficiency", "Discharge Effectiveness", "Throughput"]
 )
 
-filtered = df[(df['date'] >= pd.to_datetime(start)) &
-              (df['date'] <= pd.to_datetime(end))]
+filtered = df[
+    (df['date'] >= pd.to_datetime(start)) &
+    (df['date'] <= pd.to_datetime(end))
+]
 
 # ---------------------------------------------------------
-# TITLE
+# KPI DISPLAY
 # ---------------------------------------------------------
-st.title("📊 Care Transition Efficiency Dashboard")
-
-# ---------------------------------------------------------
-# KPI CARDS
-# ---------------------------------------------------------
-st.subheader("Key Performance Indicators")
+st.subheader("📌 Key Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -101,15 +100,15 @@ col4.metric("Avg Backlog",
             int(filtered['backlog'].mean()))
 
 # ---------------------------------------------------------
-# ALERT SYSTEM
+# ALERT
 # ---------------------------------------------------------
 if filtered['backlog'].mean() > 0:
-    st.warning("⚠️ System backlog present → possible delays in placement")
+    st.warning("⚠️ Backlog present → possible delays")
 else:
-    st.success("✅ System operating smoothly")
+    st.success("✅ System running smoothly")
 
 # ---------------------------------------------------------
-# TABS (Better UI)
+# TABS
 # ---------------------------------------------------------
 tab1, tab2, tab3 = st.tabs(["📈 Overview", "⚙️ Efficiency", "📉 Backlog"])
 
@@ -118,14 +117,21 @@ with tab1:
     st.subheader("Pipeline Flow")
 
     fig, ax = plt.subplots()
+
     ax.plot(filtered['date'], filtered['cbp_intake'], label="CBP Intake")
     ax.plot(filtered['date'], filtered['hhs_discharge'], label="HHS Discharge")
+
+    # FIX DATE SPACING
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.xticks(rotation=45)
+
     ax.legend()
     st.pyplot(fig)
 
 # ---------------- EFFICIENCY ----------------
 with tab2:
-    st.subheader("Selected KPI Trend")
+    st.subheader("Efficiency Trend")
 
     fig, ax = plt.subplots()
 
@@ -136,29 +142,45 @@ with tab2:
     else:
         ax.plot(filtered['date'], filtered['throughput'])
 
+    # FIX DATE SPACING
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.xticks(rotation=45)
+
     st.pyplot(fig)
 
 # ---------------- BACKLOG ----------------
 with tab3:
-    st.subheader("Backlog Analysis")
+    st.subheader("Backlog Trend")
 
     fig, ax = plt.subplots()
+
     ax.plot(filtered['date'], filtered['backlog'], label="Backlog")
     ax.plot(filtered['date'], filtered['backlog_ma7'], linestyle='--', label="7-day Avg")
+
+    # FIX DATE SPACING
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+    plt.xticks(rotation=45)
+
     ax.axhline(0)
     ax.legend()
+
     st.pyplot(fig)
 
 # ---------------------------------------------------------
-# INSIGHTS (IMPORTANT FOR PROJECT)
+# INSIGHTS
 # ---------------------------------------------------------
-st.subheader("📌 Key Insights")
+st.subheader("📌 Insights")
 
 st.markdown(f"""
-- Average transfer efficiency is **{filtered['transfer_efficiency'].mean():.2f}**, showing movement speed from CBP to HHS.
-- Discharge effectiveness of **{filtered['discharge_effectiveness'].mean():.2f}** reflects placement success.
-- A backlog of **{int(filtered['backlog'].mean())}** indicates system pressure.
-- Throughput helps evaluate overall pipeline performance.
+- Transfer Efficiency: **{filtered['transfer_efficiency'].mean():.2f}**
+- Discharge Effectiveness: **{filtered['discharge_effectiveness'].mean():.2f}**
+- Throughput: **{filtered['throughput'].mean():.2f}**
+- Average Backlog: **{int(filtered['backlog'].mean())}**
+
+👉 If backlog is consistently positive, system is facing delays.
+👉 Improving discharge rate can reduce backlog.
 """)
 
 # ---------------------------------------------------------
