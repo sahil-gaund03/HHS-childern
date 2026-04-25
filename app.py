@@ -1,65 +1,90 @@
+# ============================================
+# SIMPLE STREAMLIT DASHBOARD
+# ============================================
+
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="UAC Care Analytics", layout="wide")
+st.title("Care Transition Dashboard")
 
-# ------------------------------
-# Load Data (NO UPLOADER)
-# ------------------------------
-@st.cache_data
-def load_data():
-    try:
-        # Get current file directory
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# -------------------------------
+# LOAD DATA
+# -------------------------------
+df = pd.read_csv("HHS_Unaccompanied_Alien_Children_Program.csv")
+df['Date'] = pd.to_datetime(df['Date'])
 
-        # Build path safely
-        file_path = os.path.join(BASE_DIR, "HHS_Unaccompanied_Alien_Children_Program.csv")
+df.columns = [
+    "date",
+    "cbp_intake",
+    "cbp_custody",
+    "cbp_transfer",
+    "hhs_care",
+    "hhs_discharge"
+]
 
-        df = pd.read_csv(file_path)
+# -------------------------------
+# KPIs
+# -------------------------------
+df['transfer_efficiency'] = df['cbp_transfer'] / df['cbp_custody']
+df['discharge_effectiveness'] = df['hhs_discharge'] / df['hhs_care']
+df['backlog'] = df['cbp_intake'] - df['hhs_discharge']
 
-        # Rename columns (your dataset)
-        df = df.rename(columns={
-            "Children apprehended and placed in CBP custody*": "CBP_Apprehended",
-            "Children in CBP custody": "CBP_In_Custody",
-            "Children transferred out of CBP custody": "CBP_Transferred",
-            "Children in HHS Care": "HHS_In_Care",
-            "Children discharged from HHS Care": "HHS_Discharged"
-        })
+# -------------------------------
+# DATE FILTER
+# -------------------------------
+start = st.date_input("Start Date", df['date'].min())
+end = st.date_input("End Date", df['date'].max())
 
-        # Date
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.sort_values("Date")
+filtered = df[(df['date'] >= pd.to_datetime(start)) &
+              (df['date'] <= pd.to_datetime(end))]
 
-        # Clean numeric columns
-        cols = [
-            "CBP_Apprehended",
-            "CBP_In_Custody",
-            "CBP_Transferred",
-            "HHS_In_Care",
-            "HHS_Discharged"
-        ]
+# -------------------------------
+# KPI DISPLAY
+# -------------------------------
+st.subheader("Key Metrics")
 
-        for col in cols:
-            df[col] = pd.to_numeric(
-                df[col].astype(str).str.replace(",", "").str.strip(),
-                errors="coerce"
-            )
+st.write("Transfer Efficiency:", round(filtered['transfer_efficiency'].mean(),2))
+st.write("Discharge Effectiveness:", round(filtered['discharge_effectiveness'].mean(),2))
+st.write("Average Backlog:", int(filtered['backlog'].mean()))
 
-        df.fillna(method="ffill", inplace=True)
+# -------------------------------
+# BACKLOG ALERT
+# -------------------------------
+if filtered['backlog'].mean() > 0:
+    st.warning("Backlog detected!")
+else:
+    st.success("System is balanced")
 
-        # KPIs
-        df["Transfer_Efficiency"] = df["CBP_Transferred"] / df["CBP_In_Custody"].replace(0, np.nan)
-        df["Discharge_Efficiency"] = df["HHS_Discharged"] / df["HHS_In_Care"].replace(0, np.nan)
-        df["Throughput"] = df["HHS_Discharged"] / df["CBP_Apprehended"].replace(0, np.nan)
-        df["Backlog"] = (df["CBP_In_Custody"] + df["HHS_In_Care"]) - df["HHS_Discharged"]
+# -------------------------------
+# PLOTS
+# -------------------------------
 
-        return df
+st.subheader("Intake vs Discharge")
 
-    except Exception as e:
-        st.error(f"Error loading dataset: {e}")
-        st.stop()
+fig, ax = plt.subplots()
+ax.plot(filtered['date'], filtered['cbp_intake'], label="CBP Intake")
+ax.plot(filtered['date'], filtered['hhs_discharge'], label="HHS Discharge")
+ax.legend()
+st.pyplot(fig)
 
+st.subheader("Efficiency Trends")
 
-df = load_data()
+fig, ax = plt.subplots()
+ax.plot(filtered['date'], filtered['transfer_efficiency'], label="Transfer Efficiency")
+ax.plot(filtered['date'], filtered['discharge_effectiveness'], label="Discharge Effectiveness")
+ax.legend()
+st.pyplot(fig)
+
+st.subheader("Backlog Trend")
+
+fig, ax = plt.subplots()
+ax.plot(filtered['date'], filtered['backlog'])
+ax.axhline(0)
+st.pyplot(fig)
+
+# -------------------------------
+# DATA VIEW
+# -------------------------------
+st.subheader("Data Preview")
+st.dataframe(filtered)
